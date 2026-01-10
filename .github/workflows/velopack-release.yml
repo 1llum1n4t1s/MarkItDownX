@@ -37,6 +37,7 @@ jobs:
             --packId MarkItDownX \
             --packVersion $env:VPK_VERSION \
             --packDir artifacts/publish \
+            --mainExe MarkItDownX.exe \
             --outputDir artifacts/releases
 
       - name: GitHub Releases へアップロード
