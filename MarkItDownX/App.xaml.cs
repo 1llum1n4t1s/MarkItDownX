@@ -20,7 +20,7 @@ public partial class App : Application
         if (updateInfo is not null)
         {
             await updateManager.DownloadUpdatesAsync(updateInfo);
-            updateManager.ApplyUpdatesAndRestart();
+            updateManager.ApplyUpdatesAndRestart(updateInfo);
             return;
         }
 

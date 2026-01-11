@@ -2,19 +2,19 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
   </PropertyGroup>
   
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Velopack" Version="0.0.*" />
   </ItemGroup>
 
   <!-- WiX Toolset v6.xを追加 -->
   <ItemGroup>
-    <PackageReference Include="WixToolset.Sdk" Version="6.0.1" />
+    <PackageReference Include="WixToolset.Sdk" Version="6.0.2" />
   </ItemGroup>
 
   <!-- Scriptsフォルダを出力ディレクトリにコピー -->
