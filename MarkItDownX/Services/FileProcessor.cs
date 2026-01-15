@@ -15,6 +15,13 @@ public class FileProcessor
     private readonly MarkItDownProcessor _markItDownProcessor;
     private readonly Action<string> _logMessage;
 
+    private enum PathType
+    {
+        None,
+        File,
+        Directory
+    }
+
     /// <summary>
     /// Constructor
     /// </summary>
@@ -31,14 +38,14 @@ public class FileProcessor
     /// </summary>
     /// <param name="path">Path to validate</param>
     /// <param name="fullPath">Canonical path when valid</param>
-    /// <returns>True if path is valid and safe</returns>
-    private bool TryGetValidPath(string path, out string fullPath)
+    /// <returns>Detected path type when valid</returns>
+    private PathType TryGetValidPath(string path, out string fullPath)
     {
         fullPath = string.Empty;
 
         if (string.IsNullOrWhiteSpace(path))
         {
-            return false;
+            return PathType.None;
         }
 
         try
@@ -47,15 +54,24 @@ public class FileProcessor
 
             if (!Path.IsPathRooted(fullPath))
             {
-                return false;
+                return PathType.None;
             }
 
-            // Verify the path exists and is accessible
-            return File.Exists(fullPath) || Directory.Exists(fullPath);
+            if (File.Exists(fullPath))
+            {
+                return PathType.File;
+            }
+
+            if (Directory.Exists(fullPath))
+            {
+                return PathType.Directory;
+            }
+
+            return PathType.None;
         }
         catch
         {
-            return false;
+            return PathType.None;
         }
     }
 
@@ -71,19 +87,17 @@ public class FileProcessor
         foreach (var path in paths)
         {
             // Validate path for security
-            if (!TryGetValidPath(path, out var fullPath))
+            switch (TryGetValidPath(path, out var fullPath))
             {
-                _logMessage($"Invalid path rejected: {path}");
-                continue;
-            }
-
-            if (File.Exists(fullPath))
-            {
-                files.Add(fullPath);
-            }
-            else if (Directory.Exists(fullPath))
-            {
-                folders.Add(fullPath);
+                case PathType.File:
+                    files.Add(fullPath);
+                    break;
+                case PathType.Directory:
+                    folders.Add(fullPath);
+                    break;
+                default:
+                    _logMessage($"Invalid path rejected: {path}");
+                    break;
             }
         }
 
