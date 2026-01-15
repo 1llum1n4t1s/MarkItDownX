@@ -15,6 +15,13 @@ public class FileProcessor
     private readonly MarkItDownProcessor _markItDownProcessor;
     private readonly Action<string> _logMessage;
 
+    private enum PathType
+    {
+        None,
+        File,
+        Directory
+    }
+
     /// <summary>
     /// Constructor
     /// </summary>
@@ -30,24 +37,41 @@ public class FileProcessor
     /// Validate file path to prevent path traversal attacks
     /// </summary>
     /// <param name="path">Path to validate</param>
-    /// <returns>True if path is valid and safe</returns>
-    private bool IsValidPath(string path)
+    /// <param name="fullPath">Canonical path when valid</param>
+    /// <returns>Detected path type when valid</returns>
+    private PathType TryGetValidPath(string path, out string fullPath)
     {
+        fullPath = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return PathType.None;
+        }
+
         try
         {
-            // Get the full canonical path
-            var fullPath = Path.GetFullPath(path);
+            fullPath = Path.GetFullPath(path);
 
-            // Check for path traversal attempts
-            if (fullPath.Contains(".."))
-                return false;
+            if (!Path.IsPathRooted(fullPath))
+            {
+                return PathType.None;
+            }
 
-            // Verify the path exists and is accessible
-            return File.Exists(fullPath) || Directory.Exists(fullPath);
+            if (File.Exists(fullPath))
+            {
+                return PathType.File;
+            }
+
+            if (Directory.Exists(fullPath))
+            {
+                return PathType.Directory;
+            }
+
+            return PathType.None;
         }
         catch
         {
-            return false;
+            return PathType.None;
         }
     }
 
@@ -57,31 +81,29 @@ public class FileProcessor
     /// <param name="paths">Array of dropped paths</param>
     public async Task ProcessDroppedItemsAsync(string[] paths)
     {
-        var files = new List<string>();
-        var folders = new List<string>();
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var path in paths)
         {
             // Validate path for security
-            if (!IsValidPath(path))
+            switch (TryGetValidPath(path, out var fullPath))
             {
-                _logMessage($"Invalid path rejected: {path}");
-                continue;
-            }
-
-            if (File.Exists(path))
-            {
-                files.Add(Path.GetFullPath(path));
-            }
-            else if (Directory.Exists(path))
-            {
-                folders.Add(Path.GetFullPath(path));
+                case PathType.File:
+                    files.Add(fullPath);
+                    break;
+                case PathType.Directory:
+                    folders.Add(fullPath);
+                    break;
+                default:
+                    _logMessage($"Invalid path rejected: {path}");
+                    break;
             }
         }
 
         if (files.Count > 0 || folders.Count > 0)
         {
-            await ProcessFilesWithMarkItDownAsync(files, folders);
+            await ProcessFilesWithMarkItDownAsync(new List<string>(files), new List<string>(folders));
         }
     }
 
@@ -90,8 +112,11 @@ public class FileProcessor
     /// </summary>
     /// <param name="files">List of files to process</param>
     /// <param name="folders">List of folders to process</param>
-    private async Task ProcessFilesWithMarkItDownAsync(List<string> files, List<string> folders)
+    private async Task ProcessFilesWithMarkItDownAsync(IReadOnlyCollection<string> files, IReadOnlyCollection<string> folders)
     {
+        string? tempFilePathsJson = null;
+        string? tempFolderPathsJson = null;
+
         try
         {
             // MarkItDownライブラリの利用可能性を事前にチェック
@@ -126,8 +151,9 @@ public class FileProcessor
             _logMessage($"フォルダパスJSON: {folderPathsJson}");
                 
             // JSON文字列をファイルに保存して、ファイルパスを渡す
-            var tempFilePathsJson = Path.Combine(appDir, "temp_file_paths.json");
-            var tempFolderPathsJson = Path.Combine(appDir, "temp_folder_paths.json");
+            var tempDirectory = Path.GetTempPath();
+            tempFilePathsJson = Path.Combine(tempDirectory, $"markitdown_files_{Guid.NewGuid():N}.json");
+            tempFolderPathsJson = Path.Combine(tempDirectory, $"markitdown_folders_{Guid.NewGuid():N}.json");
                 
             // BOMなしのUTF-8でファイルを保存
             var utf8NoBom = new UTF8Encoding(false);
@@ -146,5 +172,31 @@ public class FileProcessor
             _logMessage($"スタックトレース: {ex.StackTrace}");
             _logMessage($"MarkItDown変換中にエラーが発生しました: {ex.Message}");
         }
+        finally
+        {
+            CleanupTempFile(tempFilePathsJson);
+            CleanupTempFile(tempFolderPathsJson);
+        }
     }
-} 
+
+    private void CleanupTempFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+                _logMessage($"一時ファイルを削除しました: {path}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logMessage($"一時ファイル削除に失敗: {ex.Message}");
+        }
+    }
+}
